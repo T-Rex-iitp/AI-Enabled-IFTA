@@ -19,7 +19,7 @@
 #include <algorithm>
 
 #pragma package(smart_init)
-#pragma link "mmsystem.lib"
+#pragma link "winmm.lib"
 
 //---------------------------------------------------------------------------
 // TWhisperSTT Implementation
