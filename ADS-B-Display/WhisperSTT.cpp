@@ -105,9 +105,11 @@ bool TWhisperSTT::InitializeAudioCapture()
     waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
     waveFormat.cbSize = 0;
     
-    MMRESULT result = waveInOpen(&hWaveIn, WAVE_MAPPER, &waveFormat,
-                                 (DWORD_PTR)WaveInProc, (DWORD_PTR)this,
-                                 CALLBACK_FUNCTION);
+    HWAVEIN hWaveInActual = NULL;
+    MMRESULT result = waveInOpen(&hWaveInActual, WAVE_MAPPER, &waveFormat,
+                                  (DWORD_PTR)WaveInProc, (DWORD_PTR)this,
+                                  CALLBACK_FUNCTION);
+    hWaveIn = (HWAVEIN_PTR)hWaveInActual;
     
     if (result != MMSYSERR_NOERROR)
     {
@@ -127,7 +129,7 @@ bool TWhisperSTT::InitializeAudioCapture()
         pWaveHdr->dwFlags = 0;
         pWaveHdr->dwLoops = 0;
         
-        waveInPrepareHeader(hWaveIn, pWaveHdr, sizeof(WAVEHDR));
+        waveInPrepareHeader((HWAVEIN)hWaveIn, pWaveHdr, sizeof(WAVEHDR));
         waveHeaders[i] = (WAVEHDR_PTR)pWaveHdr;
     }
     
@@ -140,14 +142,15 @@ void TWhisperSTT::CleanupAudioCapture()
 {
     if (hWaveIn)
     {
-        waveInReset(hWaveIn);
+        HWAVEIN hWaveInActual = (HWAVEIN)hWaveIn;
+        waveInReset(hWaveInActual);
         
         for (int i = 0; i < 2; i++)
         {
             if (waveHeaders[i])
             {
                 WAVEHDR* pWaveHdr = (WAVEHDR*)waveHeaders[i];
-                waveInUnprepareHeader(hWaveIn, pWaveHdr, sizeof(WAVEHDR));
+                waveInUnprepareHeader(hWaveInActual, pWaveHdr, sizeof(WAVEHDR));
                 if (pWaveHdr->lpData)
                 {
                     delete[] pWaveHdr->lpData;
@@ -157,7 +160,7 @@ void TWhisperSTT::CleanupAudioCapture()
             }
         }
         
-        waveInClose(hWaveIn);
+        waveInClose(hWaveInActual);
         hWaveIn = NULL;
     }
     
@@ -194,16 +197,17 @@ bool TWhisperSTT::StartListening()
     }
     
     // Start recording
+    HWAVEIN hWaveInActual = (HWAVEIN)hWaveIn;
     for (int i = 0; i < 2; i++)
     {
         if (waveHeaders[i])
         {
             WAVEHDR* pWaveHdr = (WAVEHDR*)waveHeaders[i];
-            waveInAddBuffer(hWaveIn, pWaveHdr, sizeof(WAVEHDR));
+            waveInAddBuffer(hWaveInActual, pWaveHdr, sizeof(WAVEHDR));
         }
     }
     
-    if (waveInStart(hWaveIn) != MMSYSERR_NOERROR)
+    if (waveInStart(hWaveInActual) != MMSYSERR_NOERROR)
     {
         lastError = L"Failed to start audio recording";
         return false;
@@ -225,8 +229,9 @@ void TWhisperSTT::StopListening()
     // Stop recording
     if (hWaveIn)
     {
-        waveInStop(hWaveIn);
-        waveInReset(hWaveIn);
+        HWAVEIN hWaveInActual = (HWAVEIN)hWaveIn;
+        waveInStop(hWaveInActual);
+        waveInReset(hWaveInActual);
     }
     
     // Signal worker thread to stop
@@ -242,14 +247,14 @@ void TWhisperSTT::StopListening()
 
 //---------------------------------------------------------------------------
 
-void CALLBACK TWhisperSTT::WaveInProc(HWAVEIN hwi, unsigned int uMsg, unsigned long dwInstance,
-                                      unsigned long dwParam1, unsigned long dwParam2)
+void CALLBACK TWhisperSTT::WaveInProc(void* hwi, unsigned int uMsg, void* dwInstance,
+                                      void* dwParam1, void* dwParam2)
 {
     if (uMsg != WIM_DATA)
         return;
     
-    TWhisperSTT* pThis = (TWhisperSTT*)(void*)dwInstance;
-    WAVEHDR* pWaveHdr = (WAVEHDR*)(void*)dwParam1;
+    TWhisperSTT* pThis = (TWhisperSTT*)dwInstance;
+    WAVEHDR* pWaveHdr = (WAVEHDR*)dwParam1;
     
     if (!pThis || !pThis->isRecording)
         return;
@@ -692,7 +697,7 @@ void TAudioBufferManager::PushBuffer(const std::vector<short>& buffer)
 
 //---------------------------------------------------------------------------
 
-bool TAudioBufferManager::PopBuffer(std::vector<short>& buffer, DWORD timeout)
+bool TAudioBufferManager::PopBuffer(std::vector<short>& buffer, unsigned long timeout)
 {
     if (WaitForSingleObject(dataAvailableEvent, timeout) == WAIT_TIMEOUT)
         return false;

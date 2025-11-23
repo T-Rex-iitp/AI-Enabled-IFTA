@@ -26,7 +26,9 @@
 // Use opaque pointer types in header
 struct WAVEHDR_IMPL;
 typedef WAVEHDR_IMPL* WAVEHDR_PTR;
-typedef void* HWAVEIN;
+// Don't define HWAVEIN here - let mmsystem.h define it in cpp file
+// Use void* in header to avoid typedef redefinition conflicts
+typedef void* HWAVEIN_PTR;
 typedef unsigned int MMRESULT;
 
 #include <vector>
@@ -58,7 +60,7 @@ class TWhisperSTT
 {
 private:
     // Audio recording members (opaque pointers to avoid mmeapi.h conflicts)
-    HWAVEIN hWaveIn;
+    HWAVEIN_PTR hWaveIn;
     WAVEHDR_PTR waveHeaders[2];  // Use pointer array instead of array of structs
     bool isRecording;
     bool isInitialized;
@@ -88,8 +90,8 @@ private:
     bool SaveWavFile(const std::wstring& filename, const std::vector<short>& audioData);
     
     // Static callback for audio recording
-    static void CALLBACK WaveInProc(HWAVEIN hwi, unsigned int uMsg, unsigned long dwInstance,
-                                    unsigned long dwParam1, unsigned long dwParam2);
+    static void CALLBACK WaveInProc(void* hwi, unsigned int uMsg, void* dwInstance,
+                                    void* dwParam1, void* dwParam2);
     
     // Static thread procedure
     static unsigned long WINAPI RecognitionThreadProc(void* lpParam);
@@ -179,7 +181,7 @@ public:
     ~TAudioBufferManager();
     
     void PushBuffer(const std::vector<short>& buffer);
-    bool PopBuffer(std::vector<short>& buffer, DWORD timeout = INFINITE);
+    bool PopBuffer(std::vector<short>& buffer, unsigned long timeout = INFINITE);
     void Clear();
     size_t GetQueueSize();
 };
