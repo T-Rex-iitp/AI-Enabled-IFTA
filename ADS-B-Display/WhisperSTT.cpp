@@ -477,7 +477,7 @@ std::wstring TWhisperSTT::RunLocalWhisper(const std::vector<short>& audioData)
         }
         else
         {
-            DWORD error = GetLastError();
+            ::DWORD error = ::GetLastError();
             lastError = L"Failed to launch Whisper process. Error code: " + IntToStr((int)error);
         }
         
