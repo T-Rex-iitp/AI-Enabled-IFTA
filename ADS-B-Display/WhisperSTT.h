@@ -9,7 +9,7 @@
 #include <vcl.h>
 #include <System.Classes.hpp>
 
-// Windows API includes - use proper order to avoid conflicts
+// Windows API includes - avoid mmeapi.h conflicts by not including mmsystem.h in header
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -18,9 +18,15 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-// Include Windows headers in correct order
+// Include only basic Windows types
 #include <windows.h>
-#include <mmsystem.h>
+
+// Forward declarations for audio types (avoid mmsystem.h in header)
+// mmsystem.h will be included only in .cpp file to prevent mmeapi.h conflicts
+struct tagWAVEHDR;
+typedef struct tagWAVEHDR WAVEHDR;
+typedef void* HWAVEIN;
+typedef unsigned int MMRESULT;
 
 #include <vector>
 #include <string>
@@ -50,9 +56,9 @@ typedef std::function<void(const std::wstring&)> RecognitionCallback;
 class TWhisperSTT
 {
 private:
-    // Audio recording members
-    ::HWAVEIN hWaveIn;
-    ::WAVEHDR waveHeaders[2];
+    // Audio recording members (opaque pointers to avoid mmeapi.h conflicts)
+    HWAVEIN hWaveIn;
+    WAVEHDR* waveHeaders[2];  // Use pointer array instead of array of structs
     bool isRecording;
     bool isInitialized;
     std::vector<short> audioBuffer;
@@ -84,11 +90,11 @@ private:
     bool SaveWavFile(const std::wstring& filename, const std::vector<short>& audioData);
     
     // Static callback for audio recording
-    static void CALLBACK WaveInProc(::HWAVEIN hwi, ::UINT uMsg, ::DWORD_PTR dwInstance,
-                                    ::DWORD_PTR dwParam1, ::DWORD_PTR dwParam2);
+    static void CALLBACK WaveInProc(HWAVEIN hwi, unsigned int uMsg, unsigned long dwInstance,
+                                    unsigned long dwParam1, unsigned long dwParam2);
     
     // Static thread procedure
-    static ::DWORD WINAPI RecognitionThreadProc(::LPVOID lpParam);
+    static unsigned long WINAPI RecognitionThreadProc(void* lpParam);
     
 public:
     TWhisperSTT();

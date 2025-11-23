@@ -4,6 +4,17 @@
 
 #pragma hdrstop
 #include "WhisperSTT.h"
+
+// Include mmsystem.h only in cpp file to avoid mmeapi.h conflicts
+// This prevents type ambiguity errors
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <mmsystem.h>
+
 #include <System.Net.HttpClient.hpp>
 #include <System.JSON.hpp>
 #include <System.NetEncoding.hpp>
@@ -28,6 +39,10 @@ TWhisperSTT::TWhisperSTT()
       processingAudio(false),
       apiEndpoint(L"")
 {
+    // Initialize wave headers as pointers
+    waveHeaders[0] = NULL;
+    waveHeaders[1] = NULL;
+    
     InitializeCriticalSection(&audioLock);
     stopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 }
@@ -38,6 +53,20 @@ TWhisperSTT::~TWhisperSTT()
 {
     StopListening();
     CleanupAudioCapture();
+    
+    // Ensure wave headers are cleaned up
+    for (int i = 0; i < 2; i++)
+    {
+        if (waveHeaders[i])
+        {
+            if (waveHeaders[i]->lpData)
+            {
+                delete[] waveHeaders[i]->lpData;
+            }
+            delete waveHeaders[i];
+            waveHeaders[i] = NULL;
+        }
+    }
     
     if (stopEvent)
         CloseHandle(stopEvent);
@@ -68,8 +97,8 @@ bool TWhisperSTT::Initialize(WhisperModelType model)
 
 bool TWhisperSTT::InitializeAudioCapture()
 {
-    ::WAVEFORMATEX waveFormat;
-    ZeroMemory(&waveFormat, sizeof(::WAVEFORMATEX));
+    WAVEFORMATEX waveFormat;
+    ZeroMemory(&waveFormat, sizeof(WAVEFORMATEX));
     
     waveFormat.wFormatTag = WAVE_FORMAT_PCM;
     waveFormat.nChannels = CHANNELS;
@@ -79,9 +108,9 @@ bool TWhisperSTT::InitializeAudioCapture()
     waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
     waveFormat.cbSize = 0;
     
-    ::MMRESULT result = waveInOpen(&hWaveIn, WAVE_MAPPER, &waveFormat,
-                                   (::DWORD_PTR)WaveInProc, (::DWORD_PTR)this,
-                                   CALLBACK_FUNCTION);
+    MMRESULT result = waveInOpen(&hWaveIn, WAVE_MAPPER, &waveFormat,
+                                 (DWORD_PTR)WaveInProc, (DWORD_PTR)this,
+                                 CALLBACK_FUNCTION);
     
     if (result != MMSYSERR_NOERROR)
     {
@@ -89,18 +118,19 @@ bool TWhisperSTT::InitializeAudioCapture()
         return false;
     }
     
-    // Prepare wave headers
+    // Allocate and prepare wave headers
     for (int i = 0; i < 2; i++)
     {
-        ZeroMemory(&waveHeaders[i], sizeof(WAVEHDR));
-        waveHeaders[i].lpData = new char[BUFFER_SIZE * 2]; // 2 bytes per sample
-        waveHeaders[i].dwBufferLength = BUFFER_SIZE * 2;
-        waveHeaders[i].dwBytesRecorded = 0;
-        waveHeaders[i].dwUser = 0;
-        waveHeaders[i].dwFlags = 0;
-        waveHeaders[i].dwLoops = 0;
+        waveHeaders[i] = new WAVEHDR;
+        ZeroMemory(waveHeaders[i], sizeof(WAVEHDR));
+        waveHeaders[i]->lpData = new char[BUFFER_SIZE * 2]; // 2 bytes per sample
+        waveHeaders[i]->dwBufferLength = BUFFER_SIZE * 2;
+        waveHeaders[i]->dwBytesRecorded = 0;
+        waveHeaders[i]->dwUser = 0;
+        waveHeaders[i]->dwFlags = 0;
+        waveHeaders[i]->dwLoops = 0;
         
-        waveInPrepareHeader(hWaveIn, &waveHeaders[i], sizeof(WAVEHDR));
+        waveInPrepareHeader(hWaveIn, waveHeaders[i], sizeof(WAVEHDR));
     }
     
     return true;
@@ -116,8 +146,16 @@ void TWhisperSTT::CleanupAudioCapture()
         
         for (int i = 0; i < 2; i++)
         {
-            waveInUnprepareHeader(hWaveIn, &waveHeaders[i], sizeof(WAVEHDR));
-            delete[] waveHeaders[i].lpData;
+            if (waveHeaders[i])
+            {
+                waveInUnprepareHeader(hWaveIn, waveHeaders[i], sizeof(WAVEHDR));
+                if (waveHeaders[i]->lpData)
+                {
+                    delete[] waveHeaders[i]->lpData;
+                }
+                delete waveHeaders[i];
+                waveHeaders[i] = NULL;
+            }
         }
         
         waveInClose(hWaveIn);
@@ -159,10 +197,13 @@ bool TWhisperSTT::StartListening()
     // Start recording
     for (int i = 0; i < 2; i++)
     {
-        waveInAddBuffer(hWaveIn, &waveHeaders[i], sizeof(WAVEHDR));
+        if (waveHeaders[i])
+        {
+            waveInAddBuffer(hWaveIn, waveHeaders[i], sizeof(WAVEHDR));
+        }
     }
     
-    if (waveInStart(hWaveIn) != ::MMSYSERR_NOERROR)
+    if (waveInStart(hWaveIn) != MMSYSERR_NOERROR)
     {
         lastError = L"Failed to start audio recording";
         return false;
@@ -201,8 +242,8 @@ void TWhisperSTT::StopListening()
 
 //---------------------------------------------------------------------------
 
-void CALLBACK TWhisperSTT::WaveInProc(HWAVEIN hwi, ::UINT uMsg, ::DWORD_PTR dwInstance,
-                                      ::DWORD_PTR dwParam1, ::DWORD_PTR dwParam2)
+void CALLBACK TWhisperSTT::WaveInProc(HWAVEIN hwi, unsigned int uMsg, unsigned long dwInstance,
+                                      unsigned long dwParam1, unsigned long dwParam2)
 {
     if (uMsg != WIM_DATA)
         return;
@@ -210,7 +251,7 @@ void CALLBACK TWhisperSTT::WaveInProc(HWAVEIN hwi, ::UINT uMsg, ::DWORD_PTR dwIn
     TWhisperSTT* pThis = (TWhisperSTT*)dwInstance;
     WAVEHDR* pWaveHdr = (WAVEHDR*)dwParam1;
     
-    if (!pThis->isRecording)
+    if (!pThis || !pThis->isRecording)
         return;
     
     // Copy audio data to buffer
@@ -232,7 +273,7 @@ void CALLBACK TWhisperSTT::WaveInProc(HWAVEIN hwi, ::UINT uMsg, ::DWORD_PTR dwIn
 
 //---------------------------------------------------------------------------
 
-DWORD WINAPI TWhisperSTT::RecognitionThreadProc(LPVOID lpParam)
+unsigned long WINAPI TWhisperSTT::RecognitionThreadProc(void* lpParam)
 {
     TWhisperSTT* pThis = (TWhisperSTT*)lpParam;
     TVoiceActivityDetector vad;
