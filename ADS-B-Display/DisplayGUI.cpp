@@ -232,8 +232,8 @@ __fastcall TForm1::TForm1(TComponent* Owner)
  BigQueryRowCount=0;
  BigQueryFileCount=0;
  InitAircraftDB(AircraftDBPathFileName);
- Form1->SpVoice1->Rate=2; // Set Rate of Voice
- Form1->SpVoice1->Volume=100;  //Set Volume of Voice
+ SpVoice1->Rate=2; // Set Rate of Voice
+ SpVoice1->Volume=100;  //Set Volume of Voice
  
  // === NEW: Initialize Whisper STT (Local Model Only) ===
  whisperSTT = NULL;
@@ -900,7 +900,7 @@ return Str.WideChar(str, Str.WideCharBufSize());
 		 TrackHook.Valid_CC=true;
 		 TrackHook.ICAO_CC=ADS_B_Aircraft->ICAO;
 		 printf("%s\n\n",GetAircraftDBInfo(ADS_B_Aircraft->ICAO));
-         Form1->SpVoice1->Speak(wtext, SpeechVoiceSpeakFlags::SVSFlagsAsync );  // Say Text and continue
+         SpVoice1->Speak(wtext, SpeechVoiceSpeakFlags::SVSFlagsAsync );  // Say Text and continue
          delete wtext;
 		}
 		else
