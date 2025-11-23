@@ -189,6 +189,9 @@ __published:	// IDE-managed Components
 	TSpSharedRecoContext *SpSharedRecoContext1;
 	TMemo *Memo1;
 	TMenuItem *LIsten;
+	TPanel *WhisperSTTPanel;
+	TLabel *WhisperSTTLabel;
+	TButton *WhisperSTTButton;
 	void __fastcall ObjectDisplayInit(TObject *Sender);
 	void __fastcall ObjectDisplayResize(TObject *Sender);
 	void __fastcall ObjectDisplayPaint(TObject *Sender);
@@ -237,6 +240,7 @@ __published:	// IDE-managed Components
           Variant StreamPosition, SpeechRecognitionType RecognitionType,
           ISpeechRecoResult *Result);
 	void __fastcall LIstenClick(TObject *Sender);
+	void __fastcall WhisperSTTButtonClick(TObject *Sender);
 	void __fastcall ProcessVoiceCommand(const std::wstring& text);  // NEW: Voice command processor
 
 private:	// User declarations

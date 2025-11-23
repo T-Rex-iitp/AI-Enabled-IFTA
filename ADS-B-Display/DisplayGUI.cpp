@@ -255,6 +255,22 @@ __fastcall TForm1::TForm1(TComponent* Owner)
          {
              printf("Whisper STT (Local Model) initialized successfully\n");
              
+             // Update UI to show WhisperSTT is ready
+             if (WhisperSTTPanel)
+             {
+                 WhisperSTTPanel->Visible = true;
+                 WhisperSTTLabel->Caption = "Whisper STT Status: Ready";
+                 WhisperSTTButton->Caption = "Start Voice Recognition";
+                 WhisperSTTButton->Enabled = true;
+             }
+             
+             // Make Memo1 visible for transcription display
+             Memo1->Visible = true;
+             Memo1->Lines->Clear();
+             Memo1->Lines->Add("=== Whisper STT Speech Recognition ===");
+             Memo1->Lines->Add("Status: Initialized and Ready");
+             Memo1->Lines->Add("Click 'Start Voice Recognition' to begin");
+             
              // Set up recognition callback
              whisperSTT->SetRecognitionCallback([this](const std::wstring& text) {
                  // Thread-safe UI update
@@ -277,6 +293,15 @@ __fastcall TForm1::TForm1(TComponent* Owner)
              delete whisperSTT;
              whisperSTT = NULL;
              useWhisperSTT = false;
+             
+             // Update UI to show fallback to SAPI
+             if (WhisperSTTPanel)
+             {
+                 WhisperSTTPanel->Visible = true;
+                 WhisperSTTLabel->Caption = "Whisper STT Status: Failed (Using SAPI)";
+                 WhisperSTTButton->Caption = "Start Voice Recognition (SAPI)";
+                 WhisperSTTButton->Enabled = true;
+             }
          }
      }
      catch (Exception& e)
@@ -288,9 +313,32 @@ __fastcall TForm1::TForm1(TComponent* Owner)
              whisperSTT = NULL;
          }
          useWhisperSTT = false;
+         
+         // Update UI to show fallback to SAPI
+         if (WhisperSTTPanel)
+         {
+             WhisperSTTPanel->Visible = true;
+             WhisperSTTLabel->Caption = "Whisper STT Status: Error (Using SAPI)";
+             WhisperSTTButton->Caption = "Start Voice Recognition (SAPI)";
+             WhisperSTTButton->Enabled = true;
+         }
      }
  }
  // === END: Whisper STT Initialization ===
+ 
+ // Initialize WhisperSTT UI panel visibility
+ if (WhisperSTTPanel)
+ {
+     WhisperSTTPanel->Visible = true;
+     if (!useWhisperSTT || !whisperSTT)
+     {
+         // WhisperSTT not available, show SAPI fallback
+         WhisperSTTLabel->Caption = "Whisper STT Status: Not Available (Using SAPI)";
+         WhisperSTTButton->Caption = "Start Voice Recognition (SAPI)";
+     }
+ }
+ 
+ // Memo1 is already set to Visible = True in DFM file
  
  printf("init complete\n");
 }
@@ -2143,6 +2191,8 @@ void __fastcall TForm1::LIstenClick(TObject *Sender)
             {
                 LIsten->Caption = "Stop Listening (Whisper)";
                 Memo1->Lines->Add("=== Whisper STT: Listening... ===");
+                if (WhisperSTTLabel) WhisperSTTLabel->Caption = "Whisper STT Status: Listening...";
+                if (WhisperSTTButton) WhisperSTTButton->Caption = "Stop Voice Recognition";
                 printf("Whisper STT: Started listening\n");
             }
             else
@@ -2157,6 +2207,8 @@ void __fastcall TForm1::LIstenClick(TObject *Sender)
             whisperSTT->StopListening();
             LIsten->Caption = "Start Listening (Whisper)";
             Memo1->Lines->Add("=== Whisper STT: Stopped ===");
+            if (WhisperSTTLabel) WhisperSTTLabel->Caption = "Whisper STT Status: Stopped";
+            if (WhisperSTTButton) WhisperSTTButton->Caption = "Start Voice Recognition";
             printf("Whisper STT: Stopped listening\n");
         }
     }
@@ -2168,6 +2220,59 @@ void __fastcall TForm1::LIstenClick(TObject *Sender)
         SRGrammar->CmdSetRuleIdState(0, SpeechRuleState::SGDSActive);
         SRGrammar->DictationSetState(SpeechRuleState::SGDSActive);
         LIsten->Caption = "Listening (SAPI)";
+        Memo1->Lines->Add("=== SAPI: Listening... ===");
+        if (WhisperSTTLabel) WhisperSTTLabel->Caption = "Whisper STT Status: Using SAPI";
+        if (WhisperSTTButton) WhisperSTTButton->Caption = "Start Voice Recognition (SAPI)";
+    }
+}
+//---------------------------------------------------------------------------
+
+void __fastcall TForm1::WhisperSTTButtonClick(TObject *Sender)
+{
+    // Make sure Memo1 is visible
+    Memo1->Visible = true;
+    
+    // === Use Whisper STT if available ===
+    if (useWhisperSTT && whisperSTT)
+    {
+        if (!whisperSTT->IsListening())
+        {
+            // Start listening
+            if (whisperSTT->StartListening())
+            {
+                WhisperSTTLabel->Caption = "Whisper STT Status: Listening...";
+                WhisperSTTButton->Caption = "Stop Voice Recognition";
+                Memo1->Lines->Add("=== Whisper STT: Listening... ===");
+                Memo1->Lines->Add("Speak now...");
+                printf("Whisper STT: Started listening\n");
+            }
+            else
+            {
+                ShowMessage("Failed to start Whisper STT: " + 
+                           String(whisperSTT->GetLastError().c_str()));
+                WhisperSTTLabel->Caption = "Whisper STT Status: Error - " + 
+                                          String(whisperSTT->GetLastError().c_str());
+            }
+        }
+        else
+        {
+            // Stop listening
+            whisperSTT->StopListening();
+            WhisperSTTLabel->Caption = "Whisper STT Status: Stopped";
+            WhisperSTTButton->Caption = "Start Voice Recognition";
+            Memo1->Lines->Add("=== Whisper STT: Stopped ===");
+            printf("Whisper STT: Stopped listening\n");
+        }
+    }
+    else
+    {
+        // === Fallback to SAPI ===
+        SpSharedRecoContext1->EventInterests = SpeechRecoEvents::SREAllEvents;
+        SRGrammar = SpSharedRecoContext1->CreateGrammar(Variant(0));
+        SRGrammar->CmdSetRuleIdState(0, SpeechRuleState::SGDSActive);
+        SRGrammar->DictationSetState(SpeechRuleState::SGDSActive);
+        WhisperSTTLabel->Caption = "Whisper STT Status: Using SAPI";
+        WhisperSTTButton->Caption = "Listening (SAPI)";
         Memo1->Lines->Add("=== SAPI: Listening... ===");
     }
 }
