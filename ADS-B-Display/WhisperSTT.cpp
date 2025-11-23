@@ -19,7 +19,8 @@
 #include <algorithm>
 
 #pragma package(smart_init)
-#pragma link "winmm.lib"
+// Windows Multimedia API - winmm.lib will be linked via project settings
+// If linking fails, add winmm.lib manually in Project Options -> Linker -> Libraries
 
 //---------------------------------------------------------------------------
 // TWhisperSTT Implementation
