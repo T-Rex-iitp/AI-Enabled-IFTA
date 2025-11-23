@@ -239,6 +239,13 @@
             <DependentOn>DisplayGUI.h</DependentOn>
             <BuildOrder>32</BuildOrder>
         </CppCompile>
+        <CppCompile Include="WhisperSTT.cpp">
+            <DependentOn>WhisperSTT.h</DependentOn>
+            <BuildOrder>42</BuildOrder>
+        </CppCompile>
+        <None Include="WhisperSTT.h">
+            <BuildOrder>43</BuildOrder>
+        </None>
         <None Include="dms.h">
             <BuildOrder>36</BuildOrder>
         </None>
