@@ -273,7 +273,7 @@ void CALLBACK TWhisperSTT::WaveInProc(void* hwi, unsigned int uMsg, void* dwInst
     LeaveCriticalSection(&pThis->audioLock);
     
     // Re-add buffer for continuous recording
-    waveInAddBuffer(hwi, pWaveHdr, sizeof(WAVEHDR));
+    waveInAddBuffer((HWAVEIN)hwi, pWaveHdr, sizeof(WAVEHDR));
 }
 
 //---------------------------------------------------------------------------
@@ -289,7 +289,7 @@ unsigned long WINAPI TWhisperSTT::RecognitionThreadProc(void* lpParam)
     std::vector<short> speechBuffer;
     bool wasSpeaking = false;
     
-    while (WaitForSingleObject(pThis->stopEvent, PROCESS_INTERVAL) == WAIT_TIMEOUT)
+    while (WaitForSingleObject(pThis->stopEvent, (DWORD)PROCESS_INTERVAL) == WAIT_TIMEOUT)
     {
         std::vector<short> currentBuffer;
         
@@ -381,7 +381,7 @@ std::wstring TWhisperSTT::RunLocalWhisper(const std::vector<short>& audioData)
             lastError = L"main.exe not found. Checked paths:\n" + localModelPath + L"\\build\\bin\\Release\\main.exe\n" +
                        localModelPath + L"\\build\\Release\\main.exe\n" +
                        localModelPath + L"\\main.exe";
-            DeleteFile(tempFile.c_str());
+            DeleteFileW(tempFile.c_str());
             return L"";
         }
         
@@ -400,7 +400,7 @@ std::wstring TWhisperSTT::RunLocalWhisper(const std::vector<short>& audioData)
         if (!FileExists(String(modelPath.c_str())))
         {
             lastError = L"Model file not found: " + modelPath;
-            DeleteFile(tempFile.c_str());
+            DeleteFileW(tempFile.c_str());
             return L"";
         }
         
@@ -452,8 +452,8 @@ std::wstring TWhisperSTT::RunLocalWhisper(const std::vector<short>& audioData)
                             result.pop_back();
                         
                         // Cleanup
-                        DeleteFile(String(outputFile.c_str()));
-                        DeleteFile(String(tempFile.c_str()));
+            DeleteFileW(outputFile.c_str());
+            DeleteFileW(tempFile.c_str());
                         
                         delete lines;
                         delete[] cmdLine;
@@ -482,7 +482,7 @@ std::wstring TWhisperSTT::RunLocalWhisper(const std::vector<short>& audioData)
         }
         
         delete[] cmdLine;
-        DeleteFile(String(tempFile.c_str()));
+        DeleteFileW(tempFile.c_str());
     }
     catch (Exception& e)
     {
