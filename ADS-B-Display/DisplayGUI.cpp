@@ -235,7 +235,7 @@ __fastcall TForm1::TForm1(TComponent* Owner)
  Form1->SpVoice1->Rate=2; // Set Rate of Voice
  Form1->SpVoice1->Volume=100;  //Set Volume of Voice
  
- // === NEW: Initialize Whisper STT ===
+ // === NEW: Initialize Whisper STT (Local Model Only) ===
  whisperSTT = NULL;
  useWhisperSTT = true;  // Set to true to use Whisper, false to use SAPI
  
@@ -245,19 +245,15 @@ __fastcall TForm1::TForm1(TComponent* Owner)
      {
          whisperSTT = new TWhisperSTT();
          
-         // Configure Whisper STT
-         // Option 1: Use OpenAI API (uncomment and add your API key)
-         // whisperSTT->SetAPIKey(L"your-openai-api-key-here");
-         // whisperSTT->UseLocalModel(false);
-         
-         // Option 2: Use Local Model (recommended for offline use)
+         // Configure Whisper STT - Local Model Only
+         // 로컬 whisper.cpp 모델 사용 (오프라인 작동)
          whisperSTT->SetLocalModelPath(L"C:\\whisper.cpp");
          whisperSTT->UseLocalModel(true);
          
          // Initialize with Base model (good balance of speed and accuracy)
          if (whisperSTT->Initialize(WhisperModelType::BASE))
          {
-             printf("Whisper STT initialized successfully\n");
+             printf("Whisper STT (Local Model) initialized successfully\n");
              
              // Set up recognition callback
              whisperSTT->SetRecognitionCallback([this](const std::wstring& text) {
@@ -273,7 +269,11 @@ __fastcall TForm1::TForm1(TComponent* Owner)
          {
              ShowMessage("Whisper STT initialization failed: " + 
                         String(whisperSTT->GetLastError().c_str()) +
-                        "\n\nFalling back to SAPI");
+                        "\n\nPlease check:\n" +
+                        "1. whisper.cpp is installed at C:\\whisper.cpp\n" +
+                        "2. Model file exists at C:\\whisper.cpp\\models\\ggml-base.bin\n" +
+                        "3. main.exe exists at C:\\whisper.cpp\\build\\bin\\Release\\main.exe\n\n" +
+                        "Falling back to SAPI");
              delete whisperSTT;
              whisperSTT = NULL;
              useWhisperSTT = false;

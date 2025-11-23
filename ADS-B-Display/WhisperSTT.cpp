@@ -22,11 +22,11 @@ TWhisperSTT::TWhisperSTT()
       isRecording(false),
       isInitialized(false),
       currentModel(WhisperModelType::BASE),
-      useLocalModel(false),
+      useLocalModel(true),  // Always use local model
       recognitionThread(NULL),
       stopEvent(NULL),
       processingAudio(false),
-      apiEndpoint(L"https://api.openai.com/v1/audio/transcriptions")
+      apiEndpoint(L"")
 {
     InitializeCriticalSection(&audioLock);
     stopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -68,8 +68,8 @@ bool TWhisperSTT::Initialize(WhisperModelType model)
 
 bool TWhisperSTT::InitializeAudioCapture()
 {
-    WAVEFORMATEX waveFormat;
-    ZeroMemory(&waveFormat, sizeof(WAVEFORMATEX));
+    ::WAVEFORMATEX waveFormat;
+    ZeroMemory(&waveFormat, sizeof(::WAVEFORMATEX));
     
     waveFormat.wFormatTag = WAVE_FORMAT_PCM;
     waveFormat.nChannels = CHANNELS;
@@ -79,9 +79,9 @@ bool TWhisperSTT::InitializeAudioCapture()
     waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
     waveFormat.cbSize = 0;
     
-    MMRESULT result = waveInOpen(&hWaveIn, WAVE_MAPPER, &waveFormat,
-                                 (DWORD_PTR)WaveInProc, (DWORD_PTR)this,
-                                 CALLBACK_FUNCTION);
+    ::MMRESULT result = waveInOpen(&hWaveIn, WAVE_MAPPER, &waveFormat,
+                                   (::DWORD_PTR)WaveInProc, (::DWORD_PTR)this,
+                                   CALLBACK_FUNCTION);
     
     if (result != MMSYSERR_NOERROR)
     {
@@ -162,7 +162,7 @@ bool TWhisperSTT::StartListening()
         waveInAddBuffer(hWaveIn, &waveHeaders[i], sizeof(WAVEHDR));
     }
     
-    if (waveInStart(hWaveIn) != MMSYSERR_NOERROR)
+    if (waveInStart(hWaveIn) != ::MMSYSERR_NOERROR)
     {
         lastError = L"Failed to start audio recording";
         return false;
@@ -201,8 +201,8 @@ void TWhisperSTT::StopListening()
 
 //---------------------------------------------------------------------------
 
-void CALLBACK TWhisperSTT::WaveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance,
-                                      DWORD_PTR dwParam1, DWORD_PTR dwParam2)
+void CALLBACK TWhisperSTT::WaveInProc(HWAVEIN hwi, ::UINT uMsg, ::DWORD_PTR dwInstance,
+                                      ::DWORD_PTR dwParam1, ::DWORD_PTR dwParam2)
 {
     if (uMsg != WIM_DATA)
         return;
@@ -275,16 +275,8 @@ DWORD WINAPI TWhisperSTT::RecognitionThreadProc(LPVOID lpParam)
             // Speech ended, process accumulated data
             if (speechBuffer.size() >= MIN_SPEECH_SAMPLES)
             {
-                std::wstring recognizedText;
-                
-                if (pThis->useLocalModel)
-                {
-                    recognizedText = pThis->RunLocalWhisper(speechBuffer);
-                }
-                else
-                {
-                    recognizedText = pThis->SendToWhisperAPI(speechBuffer);
-                }
+                // Always use local model
+                std::wstring recognizedText = pThis->RunLocalWhisper(speechBuffer);
                 
                 // Trigger callback
                 if (!recognizedText.empty() && pThis->onRecognitionCallback)
@@ -392,8 +384,7 @@ std::wstring TWhisperSTT::SendToWhisperAPI(const std::vector<short>& audioData)
 
 std::wstring TWhisperSTT::RunLocalWhisper(const std::vector<short>& audioData)
 {
-    // This method would use whisper.cpp or similar local implementation
-    // For now, returning a placeholder implementation
+    // Use local whisper.cpp for speech recognition
     
     try
     {
@@ -405,11 +396,60 @@ std::wstring TWhisperSTT::RunLocalWhisper(const std::vector<short>& audioData)
             return L"";
         }
         
+        // Find main.exe in common locations
+        std::wstring mainExePath;
+        std::vector<std::wstring> possiblePaths = {
+            localModelPath + L"\\build\\bin\\Release\\main.exe",
+            localModelPath + L"\\build\\Release\\main.exe",
+            localModelPath + L"\\main.exe",
+            localModelPath + L"\\build\\main.exe"
+        };
+        
+        bool found = false;
+        for (const auto& path : possiblePaths)
+        {
+            if (FileExists(String(path.c_str())))
+            {
+                mainExePath = path;
+                found = true;
+                break;
+            }
+        }
+        
+        if (!found)
+        {
+            lastError = L"main.exe not found. Checked paths:\n" + localModelPath + L"\\build\\bin\\Release\\main.exe\n" +
+                       localModelPath + L"\\build\\Release\\main.exe\n" +
+                       localModelPath + L"\\main.exe";
+            DeleteFile(tempFile.c_str());
+            return L"";
+        }
+        
+        // Find model file
+        std::wstring modelName = L"ggml-base.bin";  // Default model
+        switch (currentModel)
+        {
+            case WhisperModelType::TINY:   modelName = L"ggml-tiny.bin"; break;
+            case WhisperModelType::BASE:   modelName = L"ggml-base.bin"; break;
+            case WhisperModelType::SMALL:  modelName = L"ggml-small.bin"; break;
+            case WhisperModelType::MEDIUM: modelName = L"ggml-medium.bin"; break;
+            case WhisperModelType::LARGE:  modelName = L"ggml-large.bin"; break;
+        }
+        
+        std::wstring modelPath = localModelPath + L"\\models\\" + modelName;
+        if (!FileExists(String(modelPath.c_str())))
+        {
+            lastError = L"Model file not found: " + modelPath;
+            DeleteFile(tempFile.c_str());
+            return L"";
+        }
+        
         // Build command line for whisper.cpp
-        std::wstring command = L"\"" + localModelPath + L"\\main.exe\" ";
-        command += L"-m \"" + localModelPath + L"\\models\\ggml-base.bin\" ";
+        std::wstring command = L"\"" + mainExePath + L"\" ";
+        command += L"-m \"" + modelPath + L"\" ";
         command += L"-f \"" + tempFile + L"\" ";
-        command += L"--output-txt";
+        command += L"--output-txt ";
+        command += L"--no-timestamps ";  // Remove timestamps for cleaner output
         
         // Execute whisper.cpp
         STARTUPINFO si;
@@ -420,44 +460,69 @@ std::wstring TWhisperSTT::RunLocalWhisper(const std::vector<short>& audioData)
         si.wShowWindow = SW_HIDE;
         ZeroMemory(&pi, sizeof(pi));
         
-        if (CreateProcess(NULL, (LPWSTR)command.c_str(), NULL, NULL, FALSE,
+        // Create process with command line
+        wchar_t* cmdLine = new wchar_t[command.length() + 1];
+        wcscpy(cmdLine, command.c_str());
+        
+        if (CreateProcess(NULL, cmdLine, NULL, NULL, FALSE,
                          CREATE_NO_WINDOW, NULL, NULL, &si, &pi))
         {
-            // Wait for process to complete (with timeout)
-            WaitForSingleObject(pi.hProcess, 10000);
+            // Wait for process to complete (with timeout - 30 seconds for processing)
+            DWORD waitResult = WaitForSingleObject(pi.hProcess, 30000);
+            
+            if (waitResult == WAIT_TIMEOUT)
+            {
+                TerminateProcess(pi.hProcess, 1);
+                lastError = L"Whisper processing timeout (30 seconds)";
+            }
+            else
+            {
+                // Read output file
+                std::wstring outputFile = tempFile + L".txt";
+                TStringList* lines = new TStringList();
+                try
+                {
+                    if (FileExists(String(outputFile.c_str())))
+                    {
+                        lines->LoadFromFile(String(outputFile.c_str()));
+                        std::wstring result = String(lines->Text.c_str()).c_str();
+                        
+                        // Trim whitespace
+                        while (!result.empty() && (result.back() == L' ' || result.back() == L'\n' || result.back() == L'\r'))
+                            result.pop_back();
+                        
+                        // Cleanup
+                        DeleteFile(String(outputFile.c_str()));
+                        DeleteFile(String(tempFile.c_str()));
+                        
+                        delete lines;
+                        delete[] cmdLine;
+                        CloseHandle(pi.hProcess);
+                        CloseHandle(pi.hThread);
+                        return result;
+                    }
+                    else
+                    {
+                        lastError = L"Output file not found: " + outputFile;
+                    }
+                }
+                __finally
+                {
+                    delete lines;
+                }
+            }
             
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
-            
-            // Read output file
-            std::wstring outputFile = L"temp_audio.wav.txt";
-            TStringList* lines = new TStringList();
-            try
-            {
-                if (FileExists(outputFile))
-                {
-                    lines->LoadFromFile(outputFile);
-                    std::wstring result = lines->Text.c_str();
-                    
-                    // Cleanup
-                    DeleteFile(outputFile.c_str());
-                    DeleteFile(tempFile.c_str());
-                    
-                    delete lines;
-                    return result;
-                }
-            }
-            __finally
-            {
-                delete lines;
-            }
         }
         else
         {
-            lastError = L"Failed to launch local Whisper process";
+            DWORD error = GetLastError();
+            lastError = L"Failed to launch Whisper process. Error code: " + IntToStr((int)error);
         }
         
-        DeleteFile(tempFile.c_str());
+        delete[] cmdLine;
+        DeleteFile(String(tempFile.c_str()));
     }
     catch (Exception& e)
     {
@@ -539,7 +604,8 @@ void TWhisperSTT::SetLocalModelPath(const std::wstring& path)
 
 void TWhisperSTT::UseLocalModel(bool useLocal)
 {
-    useLocalModel = useLocal;
+    // Always use local model - API mode is disabled
+    useLocalModel = true;
 }
 
 //---------------------------------------------------------------------------

@@ -8,8 +8,20 @@
 
 #include <vcl.h>
 #include <System.Classes.hpp>
+
+// Windows API includes - use proper order to avoid conflicts
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+// Include Windows headers in correct order
 #include <windows.h>
 #include <mmsystem.h>
+
 #include <vector>
 #include <string>
 #include <functional>
@@ -39,8 +51,8 @@ class TWhisperSTT
 {
 private:
     // Audio recording members
-    HWAVEIN hWaveIn;
-    WAVEHDR waveHeaders[2];
+    ::HWAVEIN hWaveIn;
+    ::WAVEHDR waveHeaders[2];
     bool isRecording;
     bool isInitialized;
     std::vector<short> audioBuffer;
@@ -72,11 +84,11 @@ private:
     bool SaveWavFile(const std::wstring& filename, const std::vector<short>& audioData);
     
     // Static callback for audio recording
-    static void CALLBACK WaveInProc(HWAVEIN hwi, UINT uMsg, DWORD_PTR dwInstance,
-                                    DWORD_PTR dwParam1, DWORD_PTR dwParam2);
+    static void CALLBACK WaveInProc(::HWAVEIN hwi, ::UINT uMsg, ::DWORD_PTR dwInstance,
+                                    ::DWORD_PTR dwParam1, ::DWORD_PTR dwParam2);
     
     // Static thread procedure
-    static DWORD WINAPI RecognitionThreadProc(LPVOID lpParam);
+    static ::DWORD WINAPI RecognitionThreadProc(::LPVOID lpParam);
     
 public:
     TWhisperSTT();
