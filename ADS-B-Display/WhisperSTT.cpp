@@ -15,9 +15,6 @@
 #endif
 #include <mmsystem.h>
 
-#include <System.Net.HttpClient.hpp>
-#include <System.JSON.hpp>
-#include <System.NetEncoding.hpp>
 #include <cmath>
 #include <algorithm>
 
@@ -36,8 +33,7 @@ TWhisperSTT::TWhisperSTT()
       useLocalModel(true),  // Always use local model
       recognitionThread(NULL),
       stopEvent(NULL),
-      processingAudio(false),
-      apiEndpoint(L"")
+      processingAudio(false)
 {
     // Initialize wave headers as pointers
     waveHeaders[0] = NULL;
@@ -59,11 +55,12 @@ TWhisperSTT::~TWhisperSTT()
     {
         if (waveHeaders[i])
         {
-            if (waveHeaders[i]->lpData)
+            WAVEHDR* pWaveHdr = (WAVEHDR*)waveHeaders[i];
+            if (pWaveHdr->lpData)
             {
-                delete[] waveHeaders[i]->lpData;
+                delete[] pWaveHdr->lpData;
             }
-            delete waveHeaders[i];
+            delete pWaveHdr;
             waveHeaders[i] = NULL;
         }
     }
@@ -121,16 +118,17 @@ bool TWhisperSTT::InitializeAudioCapture()
     // Allocate and prepare wave headers
     for (int i = 0; i < 2; i++)
     {
-        waveHeaders[i] = new WAVEHDR;
-        ZeroMemory(waveHeaders[i], sizeof(WAVEHDR));
-        waveHeaders[i]->lpData = new char[BUFFER_SIZE * 2]; // 2 bytes per sample
-        waveHeaders[i]->dwBufferLength = BUFFER_SIZE * 2;
-        waveHeaders[i]->dwBytesRecorded = 0;
-        waveHeaders[i]->dwUser = 0;
-        waveHeaders[i]->dwFlags = 0;
-        waveHeaders[i]->dwLoops = 0;
+        WAVEHDR* pWaveHdr = new WAVEHDR;
+        ZeroMemory(pWaveHdr, sizeof(WAVEHDR));
+        pWaveHdr->lpData = new char[BUFFER_SIZE * 2]; // 2 bytes per sample
+        pWaveHdr->dwBufferLength = BUFFER_SIZE * 2;
+        pWaveHdr->dwBytesRecorded = 0;
+        pWaveHdr->dwUser = 0;
+        pWaveHdr->dwFlags = 0;
+        pWaveHdr->dwLoops = 0;
         
-        waveInPrepareHeader(hWaveIn, waveHeaders[i], sizeof(WAVEHDR));
+        waveInPrepareHeader(hWaveIn, pWaveHdr, sizeof(WAVEHDR));
+        waveHeaders[i] = (WAVEHDR_PTR)pWaveHdr;
     }
     
     return true;
@@ -148,12 +146,13 @@ void TWhisperSTT::CleanupAudioCapture()
         {
             if (waveHeaders[i])
             {
-                waveInUnprepareHeader(hWaveIn, waveHeaders[i], sizeof(WAVEHDR));
-                if (waveHeaders[i]->lpData)
+                WAVEHDR* pWaveHdr = (WAVEHDR*)waveHeaders[i];
+                waveInUnprepareHeader(hWaveIn, pWaveHdr, sizeof(WAVEHDR));
+                if (pWaveHdr->lpData)
                 {
-                    delete[] waveHeaders[i]->lpData;
+                    delete[] pWaveHdr->lpData;
                 }
-                delete waveHeaders[i];
+                delete pWaveHdr;
                 waveHeaders[i] = NULL;
             }
         }
@@ -199,7 +198,8 @@ bool TWhisperSTT::StartListening()
     {
         if (waveHeaders[i])
         {
-            waveInAddBuffer(hWaveIn, waveHeaders[i], sizeof(WAVEHDR));
+            WAVEHDR* pWaveHdr = (WAVEHDR*)waveHeaders[i];
+            waveInAddBuffer(hWaveIn, pWaveHdr, sizeof(WAVEHDR));
         }
     }
     
@@ -248,8 +248,8 @@ void CALLBACK TWhisperSTT::WaveInProc(HWAVEIN hwi, unsigned int uMsg, unsigned l
     if (uMsg != WIM_DATA)
         return;
     
-    TWhisperSTT* pThis = (TWhisperSTT*)dwInstance;
-    WAVEHDR* pWaveHdr = (WAVEHDR*)dwParam1;
+    TWhisperSTT* pThis = (TWhisperSTT*)(void*)dwInstance;
+    WAVEHDR* pWaveHdr = (WAVEHDR*)(void*)dwParam1;
     
     if (!pThis || !pThis->isRecording)
         return;
@@ -333,92 +333,6 @@ unsigned long WINAPI TWhisperSTT::RecognitionThreadProc(void* lpParam)
     }
     
     return 0;
-}
-
-//---------------------------------------------------------------------------
-
-std::wstring TWhisperSTT::SendToWhisperAPI(const std::vector<short>& audioData)
-{
-    try
-    {
-        // Save audio to temporary WAV file
-        std::wstring tempFile = L"temp_audio.wav";
-        if (!SaveWavFile(tempFile, audioData))
-        {
-            lastError = L"Failed to save temporary audio file";
-            return L"";
-        }
-        
-        // Create HTTP client
-        TNetHTTPClient* httpClient = new TNetHTTPClient(NULL);
-        TNetHTTPRequest* httpRequest = new TNetHTTPRequest(NULL);
-        httpRequest->Client = httpClient;
-        
-        try
-        {
-            // Prepare multipart form data
-            TMultipartFormData* formData = new TMultipartFormData();
-            
-            // Add audio file
-            formData->AddFile(L"file", tempFile, L"audio/wav");
-            
-            // Add model parameter
-            formData->AddField(L"model", L"whisper-1");
-            
-            // Add language (optional - set to auto-detect)
-            formData->AddField(L"language", L"en");
-            
-            // Set headers
-            httpRequest->CustomHeaders->Clear();
-            httpRequest->CustomHeaders->AddValue(L"Authorization", 
-                L"Bearer " + apiKey);
-            
-            // Send request
-            THTTPResponse* response = httpRequest->Post(apiEndpoint, formData);
-            
-            if (response->StatusCode == 200)
-            {
-                // Parse JSON response
-                TJSONObject* jsonObj = (TJSONObject*)TJSONObject::ParseJSONValue(
-                    response->ContentAsString());
-                    
-                if (jsonObj)
-                {
-                    TJSONValue* textValue = jsonObj->GetValue(L"text");
-                    if (textValue)
-                    {
-                        std::wstring result = textValue->Value().c_str();
-                        delete jsonObj;
-                        delete formData;
-                        delete httpRequest;
-                        delete httpClient;
-                        DeleteFile(tempFile.c_str());
-                        return result;
-                    }
-                    delete jsonObj;
-                }
-            }
-            else
-            {
-                lastError = L"API request failed with status: " + 
-                           IntToStr(response->StatusCode);
-            }
-            
-            delete formData;
-        }
-        __finally
-        {
-            delete httpRequest;
-            delete httpClient;
-            DeleteFile(tempFile.c_str());
-        }
-    }
-    catch (Exception& e)
-    {
-        lastError = L"Exception in SendToWhisperAPI: " + e.Message;
-    }
-    
-    return L"";
 }
 
 //---------------------------------------------------------------------------
@@ -618,20 +532,6 @@ bool TWhisperSTT::SaveWavFile(const std::wstring& filename,
     {
         return false;
     }
-}
-
-//---------------------------------------------------------------------------
-
-void TWhisperSTT::SetAPIKey(const std::wstring& key)
-{
-    apiKey = key;
-}
-
-//---------------------------------------------------------------------------
-
-void TWhisperSTT::SetAPIEndpoint(const std::wstring& endpoint)
-{
-    apiEndpoint = endpoint;
 }
 
 //---------------------------------------------------------------------------

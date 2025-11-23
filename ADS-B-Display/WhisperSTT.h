@@ -23,8 +23,9 @@
 
 // Forward declarations for audio types (avoid mmsystem.h in header)
 // mmsystem.h will be included only in .cpp file to prevent mmeapi.h conflicts
-struct tagWAVEHDR;
-typedef struct tagWAVEHDR WAVEHDR;
+// Use opaque pointer types in header
+struct WAVEHDR_IMPL;
+typedef WAVEHDR_IMPL* WAVEHDR_PTR;
 typedef void* HWAVEIN;
 typedef unsigned int MMRESULT;
 
@@ -58,16 +59,14 @@ class TWhisperSTT
 private:
     // Audio recording members (opaque pointers to avoid mmeapi.h conflicts)
     HWAVEIN hWaveIn;
-    WAVEHDR* waveHeaders[2];  // Use pointer array instead of array of structs
+    WAVEHDR_PTR waveHeaders[2];  // Use pointer array instead of array of structs
     bool isRecording;
     bool isInitialized;
     std::vector<short> audioBuffer;
     CRITICAL_SECTION audioLock;
     
-    // Whisper API members
+    // Whisper Local Model members
     WhisperModelType currentModel;
-    std::wstring apiKey;
-    std::wstring apiEndpoint;
     bool useLocalModel;
     std::wstring localModelPath;
     
@@ -85,7 +84,6 @@ private:
     bool StartRecording();
     void StopRecording();
     void ProcessAudioBuffer();
-    std::wstring SendToWhisperAPI(const std::vector<short>& audioData);
     std::wstring RunLocalWhisper(const std::vector<short>& audioData);
     bool SaveWavFile(const std::wstring& filename, const std::vector<short>& audioData);
     
@@ -102,8 +100,6 @@ public:
     
     // Configuration methods
     bool Initialize(WhisperModelType model = WhisperModelType::BASE);
-    void SetAPIKey(const std::wstring& key);
-    void SetAPIEndpoint(const std::wstring& endpoint);
     void SetLocalModelPath(const std::wstring& path);
     void UseLocalModel(bool useLocal);
     
