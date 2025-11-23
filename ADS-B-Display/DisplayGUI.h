@@ -29,6 +29,7 @@
 #include <System.Net.URLClient.hpp>
 #include "SpeechLib_OCX.h"
 #include <Vcl.OleServer.hpp>
+#include "WhisperSTT.h"  // NEW: Whisper STT support
 
 typedef float T_GL_Color[4];
 
@@ -236,6 +237,7 @@ __published:	// IDE-managed Components
           Variant StreamPosition, SpeechRecognitionType RecognitionType,
           ISpeechRecoResult *Result);
 	void __fastcall LIstenClick(TObject *Sender);
+	void __fastcall ProcessVoiceCommand(const std::wstring& text);  // NEW: Voice command processor
 
 private:	// User declarations
 
@@ -257,7 +259,10 @@ public:		// User declarations
     void __fastcall CloseBigQueryCSV(void);
     bool __fastcall LoadARTCCBoundaries(AnsiString FileName);
 
-    ISpeechRecoGrammar         *SRGrammar;
+    // Speech Recognition
+    ISpeechRecoGrammar         *SRGrammar;  // OLD: SAPI (keep for TTS)
+    TWhisperSTT                *whisperSTT;  // NEW: Whisper STT
+    bool                       useWhisperSTT;  // Toggle between SAPI and Whisper
 	int                        MouseDownX,MouseDownY;
 	bool                       MouseDown;
 	TTrackHook                 TrackHook;
