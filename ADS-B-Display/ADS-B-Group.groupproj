@@ -1,0 +1,96 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{36BEC107-C9E0-487C-AAE6-7A063BE182B0}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="Map\jpeg\jpeg.cbproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Map\libgefetch\libgefetch.cbproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Map\png\png.cbproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Map\zlib\zlib.cbproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="HashTable\Lib\HashTableLib.cbproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="ADS-B-Display.cbproj">
+            <Dependencies>HashTable\Lib\HashTableLib.cbproj;Map\zlib\zlib.cbproj;Map\png\png.cbproj;Map\libgefetch\libgefetch.cbproj;Map\jpeg\jpeg.cbproj</Dependencies>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="jpeg">
+        <MSBuild Projects="Map\jpeg\jpeg.cbproj"/>
+    </Target>
+    <Target Name="jpeg:Clean">
+        <MSBuild Projects="Map\jpeg\jpeg.cbproj" Targets="Clean"/>
+    </Target>
+    <Target Name="jpeg:Make">
+        <MSBuild Projects="Map\jpeg\jpeg.cbproj" Targets="Make"/>
+    </Target>
+    <Target Name="libgefetch">
+        <MSBuild Projects="Map\libgefetch\libgefetch.cbproj"/>
+    </Target>
+    <Target Name="libgefetch:Clean">
+        <MSBuild Projects="Map\libgefetch\libgefetch.cbproj" Targets="Clean"/>
+    </Target>
+    <Target Name="libgefetch:Make">
+        <MSBuild Projects="Map\libgefetch\libgefetch.cbproj" Targets="Make"/>
+    </Target>
+    <Target Name="png">
+        <MSBuild Projects="Map\png\png.cbproj"/>
+    </Target>
+    <Target Name="png:Clean">
+        <MSBuild Projects="Map\png\png.cbproj" Targets="Clean"/>
+    </Target>
+    <Target Name="png:Make">
+        <MSBuild Projects="Map\png\png.cbproj" Targets="Make"/>
+    </Target>
+    <Target Name="zlib">
+        <MSBuild Projects="Map\zlib\zlib.cbproj"/>
+    </Target>
+    <Target Name="zlib:Clean">
+        <MSBuild Projects="Map\zlib\zlib.cbproj" Targets="Clean"/>
+    </Target>
+    <Target Name="zlib:Make">
+        <MSBuild Projects="Map\zlib\zlib.cbproj" Targets="Make"/>
+    </Target>
+    <Target Name="HashTableLib">
+        <MSBuild Projects="HashTable\Lib\HashTableLib.cbproj"/>
+    </Target>
+    <Target Name="HashTableLib:Clean">
+        <MSBuild Projects="HashTable\Lib\HashTableLib.cbproj" Targets="Clean"/>
+    </Target>
+    <Target Name="HashTableLib:Make">
+        <MSBuild Projects="HashTable\Lib\HashTableLib.cbproj" Targets="Make"/>
+    </Target>
+    <Target Name="ADS-B-Display" DependsOnTargets="HashTableLib;zlib;png;libgefetch;jpeg">
+        <MSBuild Projects="ADS-B-Display.cbproj"/>
+    </Target>
+    <Target Name="ADS-B-Display:Clean" DependsOnTargets="HashTableLib:Clean;zlib:Clean;png:Clean;libgefetch:Clean;jpeg:Clean">
+        <MSBuild Projects="ADS-B-Display.cbproj" Targets="Clean"/>
+    </Target>
+    <Target Name="ADS-B-Display:Make" DependsOnTargets="HashTableLib:Make;zlib:Make;png:Make;libgefetch:Make;jpeg:Make">
+        <MSBuild Projects="ADS-B-Display.cbproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="jpeg;libgefetch;png;zlib;HashTableLib;ADS-B-Display"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="jpeg:Clean;libgefetch:Clean;png:Clean;zlib:Clean;HashTableLib:Clean;ADS-B-Display:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="jpeg:Make;libgefetch:Make;png:Make;zlib:Make;HashTableLib:Make;ADS-B-Display:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>
